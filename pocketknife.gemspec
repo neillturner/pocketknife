@@ -47,7 +47,7 @@ With pocketknife, all of your cookbooks, roles and nodes are stored in easy-to-u
     "spec/support/libraries.rb",
     "spec/support/mkproject.rb"
   ]
-  s.homepage = %q{http://github.com/igal/pocketknife}
+  s.homepage = %q{http://github.com/neillturner/pocketknife}
   s.licenses = ["MIT"]
   s.require_paths = ["lib"]
   s.rubygems_version = %q{1.3.7}
