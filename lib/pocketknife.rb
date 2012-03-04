@@ -79,12 +79,22 @@ OPTIONS:
       parser.on("-q", "--quiet", "Display minimal status information") do |v|
         pocketknife.verbosity = false
       end
+      
+      parser.on("-s", "--sudo USER", "Run under non-root users with sudo") do |name|
+        options[:sudo] = true
+        pocketknife.user = name
+      end
+      
+      parser.on("-k", "--sshkey SSHKEY", "Use an ssh key") do |name|
+        options[:ssh_key] = name
+        pocketknife.ssh_key = name
+      end
 
       parser.on("-u", "--upload", "Upload configuration, but don't apply it") do |v|
         options[:upload] = true
       end
 
-      parser.on("-a", "--apply", "Runs cheef to apply already-uploaded configuration") do |v|
+      parser.on("-a", "--apply", "Runs chef to apply already-uploaded configuration") do |v|
         options[:apply] = true
       end
 
@@ -142,6 +152,13 @@ OPTIONS:
 
   # Amount of detail to display? true means verbose, nil means normal, false means quiet.
   attr_accessor :verbosity
+  
+  # key for ssh access.
+  attr_accessor :ssh_key
+  
+  # user when doing sudo access
+  attr_accessor :user
+
 
   # Can chef and its dependencies be installed automatically if not found? true means perform installation without prompting, false means quit if chef isn't available, and nil means prompt the user for input.
   attr_accessor :can_install

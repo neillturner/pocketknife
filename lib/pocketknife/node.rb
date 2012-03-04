@@ -14,6 +14,8 @@ class Pocketknife
 
     # Hash with information about platform, cached by {#platform}.
     attr_accessor :platform_cache
+    
+    @sudo = ""
 
     # Initialize a new node.
     #
@@ -22,6 +24,9 @@ class Pocketknife
     def initialize(name, pocketknife)
       self.name = name
       self.pocketknife = pocketknife
+      if pocketknife.user != nil and pocketknife.user != ""
+         @sudo = "sudo "
+      end   
       self.connection_cache = nil
     end
 
@@ -30,7 +35,18 @@ class Pocketknife
     # Caches result to {#connection_cache}.
     def connection
       return self.connection_cache ||= begin
-          rye = Rye::Box.new(self.name, :user => "root")
+          #rye = Rye::Box.new(self.name, :user => "root")
+          puts "Connecting to.... #{self.name}"
+          user = "root"
+          if self.pocketknife.user != nil and self.pocketknife.user != ""
+             user = self.pocketknife.user
+          end
+          puts "Connecting to.... #{self.name} as user #{user}"          
+          if self.pocketknife.ssh_key != nil
+             rye = Rye::Box.new(self.name, {:user => user, :keys => self.pocketknife.ssh_key })
+          else
+             rye = Rye::Box.new(self.name, {:user => user })
+          end
           rye.disable_safe_mode
           rye
         end
@@ -138,21 +154,40 @@ class Pocketknife
     # Installs Chef on the remote node.
     def install_chef
       self.say("Installing chef...")
-      self.execute("gem install --no-rdoc --no-ri chef", true)
+      self.execute("#{@sudo} gem install --no-rdoc --no-ri chef", true)
       self.say("Installed chef", false)
     end
 
     # Installs Rubygems on the remote node.
-    def install_rubygems
+   def install_rubygems
+     if @sudo != nil and @sudo != ""
+       install_rubygems_sudo
+     else      
       self.say("Installing rubygems...")
       self.execute(<<-HERE, true)
-cd /root &&
+  cd /root &&      
   rm -rf rubygems-1.3.7 rubygems-1.3.7.tgz &&
   wget http://production.cf.rubygems.org/rubygems/rubygems-1.3.7.tgz &&
   tar zxf rubygems-1.3.7.tgz &&
+  chmod -R a+rwX rubygems-1.3.7 &&
   cd rubygems-1.3.7 &&
   ruby setup.rb --no-format-executable &&
   rm -rf rubygems-1.3.7 rubygems-1.3.7.tgz
+      HERE
+      self.say("Installed rubygems", false)
+     end
+   end 
+
+    def install_rubygems_sudo
+      self.say("Installing rubygems sudo...")
+      self.execute(<<-HERE, true)
+  #{@sudo}rm -rf rubygems-1.3.7 rubygems-1.3.7.tgz &&
+  #{@sudo}wget http://production.cf.rubygems.org/rubygems/rubygems-1.3.7.tgz &&
+  #{@sudo}tar zxf rubygems-1.3.7.tgz &&
+  #{@sudo}chmod -R a+rwX rubygems-1.3.7 &&
+  cd rubygems-1.3.7 &&
+  #{@sudo}ruby setup.rb --no-format-executable &&
+  #{@sudo}rm -rf rubygems-1.3.7 rubygems-1.3.7.tgz
       HERE
       self.say("Installed rubygems", false)
     end
@@ -162,7 +197,7 @@ cd /root &&
       command = \
         case self.platform[:distributor].downcase
         when /ubuntu/, /debian/, /gnu\/linux/
-          "DEBIAN_FRONTEND=noninteractive apt-get --yes install ruby ruby-dev libopenssl-ruby irb build-essential wget ssl-cert"
+          "DEBIAN_FRONTEND=noninteractive sudo apt-get --yes install ruby ruby-dev libopenssl-ruby irb build-essential wget ssl-cert"
         when /centos/, /red hat/, /scientific linux/
           "yum -y install ruby ruby-shadow gcc gcc-c++ ruby-devel wget"
         else
@@ -170,6 +205,9 @@ cd /root &&
         end
 
       self.say("Installing ruby...")
+      if self.platform[:distributor].downcase == "ubuntu"
+         self.execute("sudo apt-get update", true)
+      end   
       self.execute(command, true)
       self.say("Installed ruby", false)
     end
@@ -187,20 +225,28 @@ cd /root &&
     # @yield [] Prepares the upload, executes the block, and cleans up the upload when done.
     def self.prepare_upload(&block)
       begin
+        puts("prepare upload...")
         # TODO either do this in memory or scope this to the PID to allow concurrency
         TMP_SOLO_RB.open("w") {|h| h.write(SOLO_RB_CONTENT)}
         TMP_CHEF_SOLO_APPLY.open("w") {|h| h.write(CHEF_SOLO_APPLY_CONTENT)}
-        TMP_TARBALL.open("w") do |handle|
-          Archive::Tar::Minitar.pack(
-            [
-              VAR_POCKETKNIFE_COOKBOOKS.basename.to_s,
-              VAR_POCKETKNIFE_SITE_COOKBOOKS.basename.to_s,
-              VAR_POCKETKNIFE_ROLES.basename.to_s,
-              TMP_SOLO_RB.to_s,
-              TMP_CHEF_SOLO_APPLY.to_s
-            ],
-            handle
-          )
+        # minitar gem on windows tar file corrupt so use alternative command
+        if RUBY_PLATFORM.index("mswin") != nil or RUBY_PLATFORM.index("i386-mingw32") != nil
+           puts "On windows using tar.exe...."
+           puts "#{ENV['EC2DREAM_HOME']}/tar/tar.exe cvf #{TMP_TARBALL.to_s} #{VAR_POCKETKNIFE_COOKBOOKS.basename.to_s} #{VAR_POCKETKNIFE_SITE_COOKBOOKS.basename.to_s} #{VAR_POCKETKNIFE_ROLES.basename.to_s} #{TMP_SOLO_RB.to_s} #{TMP_CHEF_SOLO_APPLY.to_s}" 
+           system "#{ENV['EC2DREAM_HOME']}/tar/tar.exe cvf #{TMP_TARBALL.to_s} #{VAR_POCKETKNIFE_COOKBOOKS.basename.to_s} #{VAR_POCKETKNIFE_SITE_COOKBOOKS.basename.to_s} #{VAR_POCKETKNIFE_ROLES.basename.to_s} #{TMP_SOLO_RB.to_s} #{TMP_CHEF_SOLO_APPLY.to_s}" 
+        else
+           TMP_TARBALL.open("w") do |handle|
+             Archive::Tar::Minitar.pack(
+              [
+               VAR_POCKETKNIFE_COOKBOOKS.basename.to_s,
+               VAR_POCKETKNIFE_SITE_COOKBOOKS.basename.to_s,
+               VAR_POCKETKNIFE_ROLES.basename.to_s,
+               TMP_SOLO_RB.to_s,
+               TMP_CHEF_SOLO_APPLY.to_s
+              ],
+              handle
+             )
+           end  
         end
       rescue Exception => e
         cleanup_upload
@@ -227,46 +273,90 @@ cd /root &&
       end
     end
 
+   # Uploads configuration information to node.
+   #
+   # IMPORTANT: You must first call {prepare_upload} to create the shared files that will be uploaded.
+   def upload
+     if @sudo != nil and @sudo != ""
+       upload_sudo
+     else   
+       self.say("Uploading configuration...")
+ 
+       self.say("Removing old files...", false)
+       self.execute <<-HERE
+    umask 0377 &&
+   rm -rf "#{ETC_CHEF}" "#{VAR_POCKETKNIFE}" "#{VAR_POCKETKNIFE_CACHE}" "#{CHEF_SOLO_APPLY}" "#{CHEF_SOLO_APPLY_ALIAS}" &&
+   mkdir -p "#{ETC_CHEF}" "#{VAR_POCKETKNIFE}" "#{VAR_POCKETKNIFE_CACHE}" "#{CHEF_SOLO_APPLY.dirname}" 
+   HERE
+ 
+       self.say("Uploading new files...", false)
+       self.say("Uploading #{self.local_node_json_pathname} to #{NODE_JSON}", false)
+       self.connection.file_upload(self.local_node_json_pathname.to_s, NODE_JSON.to_s)
+       self.connection.file_upload(TMP_TARBALL.to_s, VAR_POCKETKNIFE_TARBALL.to_s)
+       self.say("Installing new files...", false)
+       self.execute <<-HERE, true
+   cd "#{VAR_POCKETKNIFE_CACHE}" &&
+   tar xvf "#{VAR_POCKETKNIFE_TARBALL}" &&
+   chmod -R u+rwX,go= . &&
+   chown -R root:root . &&
+   mv "#{TMP_SOLO_RB}" "#{SOLO_RB}" &&
+   mv "#{TMP_CHEF_SOLO_APPLY}" "#{CHEF_SOLO_APPLY}" &&
+   chmod u+x "#{CHEF_SOLO_APPLY}" &&
+   ln -s "#{CHEF_SOLO_APPLY.basename}" "#{CHEF_SOLO_APPLY_ALIAS}" &&
+   rm "#{VAR_POCKETKNIFE_TARBALL}" &&
+   mv * "#{VAR_POCKETKNIFE}"
+       HERE
+ 
+       self.say("Finished uploading!", false)
+    end
+ end   
+
     # Uploads configuration information to node.
     #
     # IMPORTANT: You must first call {prepare_upload} to create the shared files that will be uploaded.
-    def upload
-      self.say("Uploading configuration...")
+    def upload_sudo
+      self.say("Uploading configuration using sudo...")
 
       self.say("Removing old files...", false)
       self.execute <<-HERE
-umask 0377 &&
-  rm -rf "#{ETC_CHEF}" "#{VAR_POCKETKNIFE}" "#{VAR_POCKETKNIFE_CACHE}" "#{CHEF_SOLO_APPLY}" "#{CHEF_SOLO_APPLY_ALIAS}" &&
-  mkdir -p "#{ETC_CHEF}" "#{VAR_POCKETKNIFE}" "#{VAR_POCKETKNIFE_CACHE}" "#{CHEF_SOLO_APPLY.dirname}"
-      HERE
+   umask 0377 &&
+  #{@sudo}rm -rf "#{ETC_CHEF}" "#{VAR_POCKETKNIFE}" "#{VAR_POCKETKNIFE_CACHE}" "#{CHEF_SOLO_APPLY}" "#{CHEF_SOLO_APPLY_ALIAS}" &&
+  #{@sudo}mkdir -p "#{ETC_CHEF}" "#{VAR_POCKETKNIFE}" "#{VAR_POCKETKNIFE_CACHE}" "#{CHEF_SOLO_APPLY.dirname}" &&
+  #{@sudo}chmod -R a+rwX "#{ETC_CHEF}" &&
+  #{@sudo}chmod -R a+rwX "#{VAR_POCKETKNIFE}" &&
+  #{@sudo}chmod -R a+rwX "#{VAR_POCKETKNIFE_CACHE}"
+  HERE
 
       self.say("Uploading new files...", false)
+      self.say("Uploading #{self.local_node_json_pathname} to #{NODE_JSON}", false)
       self.connection.file_upload(self.local_node_json_pathname.to_s, NODE_JSON.to_s)
       self.connection.file_upload(TMP_TARBALL.to_s, VAR_POCKETKNIFE_TARBALL.to_s)
-
       self.say("Installing new files...", false)
       self.execute <<-HERE, true
-cd "#{VAR_POCKETKNIFE_CACHE}" &&
-  tar xf "#{VAR_POCKETKNIFE_TARBALL}" &&
-  chmod -R u+rwX,go= . &&
-  chown -R root:root . &&
-  mv "#{TMP_SOLO_RB}" "#{SOLO_RB}" &&
-  mv "#{TMP_CHEF_SOLO_APPLY}" "#{CHEF_SOLO_APPLY}" &&
-  chmod u+x "#{CHEF_SOLO_APPLY}" &&
-  ln -s "#{CHEF_SOLO_APPLY.basename}" "#{CHEF_SOLO_APPLY_ALIAS}" &&
-  rm "#{VAR_POCKETKNIFE_TARBALL}" &&
-  mv * "#{VAR_POCKETKNIFE}"
+  cd "#{VAR_POCKETKNIFE_CACHE}" &&
+  #{@sudo}tar xvf "#{VAR_POCKETKNIFE_TARBALL}" &&
+  #{@sudo}chmod -R a+rwX "#{VAR_POCKETKNIFE_CACHE}"  &&
+  #{@sudo}mv "#{TMP_SOLO_RB}" "#{SOLO_RB}" &&
+  #{@sudo}mv "#{TMP_CHEF_SOLO_APPLY}" "#{CHEF_SOLO_APPLY}" &&
+  #{@sudo}chmod u+x "#{CHEF_SOLO_APPLY}" &&
+  #{@sudo}ln -s "#{CHEF_SOLO_APPLY.basename}" "#{CHEF_SOLO_APPLY_ALIAS}" &&
+  #{@sudo}rm "#{VAR_POCKETKNIFE_TARBALL}" &&
+  #{@sudo}mv * "#{VAR_POCKETKNIFE}"
       HERE
 
       self.say("Finished uploading!", false)
     end
+    
+ 
+
+    
 
     # Applies the configuration to the node. Installs Chef, Ruby and Rubygems if needed.
     def apply
       self.install
 
       self.say("Applying configuration...", true)
-      command = "chef-solo -j #{NODE_JSON}"
+      command = "#{@sudo}chef-solo -j #{NODE_JSON}"
       command << " -l debug" if self.pocketknife.verbosity == true
       self.execute(command, true)
       self.say("Finished applying!")
