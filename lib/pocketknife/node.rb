@@ -36,15 +36,15 @@ class Pocketknife
     def connection
       return self.connection_cache ||= begin
           #rye = Rye::Box.new(self.name, :user => "root")
-          puts "Connecting to.... #{self.name}"
           user = "root"
           if self.pocketknife.user != nil and self.pocketknife.user != ""
              user = self.pocketknife.user
           end
-          puts "Connecting to.... #{self.name} as user #{user}"          
-          if self.pocketknife.ssh_key != nil
+          if self.pocketknife.ssh_key != nil and self.pocketknife.ssh_key != ""
+             puts "Connecting to.... #{self.name} as user #{user} with ssh key"
              rye = Rye::Box.new(self.name, {:user => user, :keys => self.pocketknife.ssh_key })
           else
+             puts "Connecting to.... #{self.name} as user #{user}"
              rye = Rye::Box.new(self.name, {:user => user })
           end
           rye.disable_safe_mode
