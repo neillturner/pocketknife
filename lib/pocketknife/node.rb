@@ -41,10 +41,10 @@ class Pocketknife
              user = self.pocketknife.user
           end
           if self.pocketknife.ssh_key != nil and self.pocketknife.ssh_key != ""
-             puts "Connecting to.... #{self.name} as user #{user} with ssh key"
-             rye = Rye::Box.new(self.name, {:user => user, :keys => self.pocketknife.ssh_key })
+             puts "*** Connecting to .... #{self.name} as user #{user} with ssh key *** "
+             rye = Rye::Box.new(self.name, {:user => user, :keys => self.pocketknife.ssh_key, :safe => false })
           else
-             puts "Connecting to.... #{self.name} as user #{user}"
+             puts "*** Connecting to .... #{self.name} as user #{user} *** "
              rye = Rye::Box.new(self.name, {:user => user })
           end
           rye.disable_safe_mode
@@ -153,7 +153,7 @@ class Pocketknife
 
     # Installs Chef on the remote node.
     def install_chef
-      self.say("Installing chef...")
+      self.say("*** Installing chef ***")
       self.execute("#{@sudo} gem install --no-rdoc --no-ri chef", true)
       self.say("Installed chef", false)
     end
@@ -163,7 +163,7 @@ class Pocketknife
      if @sudo != nil and @sudo != ""
        install_rubygems_sudo
      else      
-      self.say("Installing rubygems...")
+      self.say("*** Installing rubygems ***")
       self.execute(<<-HERE, true)
   cd /root &&      
   rm -rf rubygems-1.3.7 rubygems-1.3.7.tgz &&
@@ -174,22 +174,30 @@ class Pocketknife
   ruby setup.rb --no-format-executable &&
   rm -rf rubygems-1.3.7 rubygems-1.3.7.tgz
       HERE
-      self.say("Installed rubygems", false)
+      self.say("*** Installed rubygems *** ", false)
      end
    end 
 
     def install_rubygems_sudo
-      self.say("Installing rubygems sudo...")
-      self.execute(<<-HERE, true)
-  #{@sudo}rm -rf rubygems-1.3.7 rubygems-1.3.7.tgz &&
-  #{@sudo}wget http://production.cf.rubygems.org/rubygems/rubygems-1.3.7.tgz &&
-  #{@sudo}tar zxf rubygems-1.3.7.tgz &&
-  #{@sudo}chmod -R a+rwX rubygems-1.3.7 &&
-  cd rubygems-1.3.7 &&
-  #{@sudo}ruby setup.rb --no-format-executable &&
-  #{@sudo}rm -rf rubygems-1.3.7 rubygems-1.3.7.tgz
+      self.say("*** Installing rubygems sudo ***")
+      case self.platform[:distributor].downcase
+        when /ubuntu/, /debian/, /gnu\/linux/
+          self.execute(<<-HERE, true)
+          sudo apt-get rubygems1.9.1
       HERE
-      self.say("Installed rubygems", false)
+      else
+         self.execute(<<-HERE, true)  
+  {@sudo}rm -rf rubygems-1.3.7 rubygems-1.3.7.tgz &&
+  {@sudo}wget http://production.cf.rubygems.org/rubygems/rubygems-1.3.7.tgz &&
+  {@sudo}tar zxf rubygems-1.3.7.tgz &&
+  {@sudo}chmod -R a+rwX rubygems-1.3.7 &&
+  cd rubygems-1.3.7 &&
+  {@sudo}ruby setup.rb --no-format-executable &&
+  {@sudo}rm -rf rubygems-1.3.7 rubygems-1.3.7.tgz
+  sudo apt-get rubygems1.9.1
+      HERE
+     end  
+     self.say("*** Installed rubygems *** ", false)
     end
 
     # Installs Ruby on the remote node.
@@ -197,19 +205,22 @@ class Pocketknife
       command = \
         case self.platform[:distributor].downcase
         when /ubuntu/, /debian/, /gnu\/linux/
-          "DEBIAN_FRONTEND=noninteractive sudo apt-get --yes install ruby ruby-dev libopenssl-ruby irb build-essential wget ssl-cert"
+          # ruby 1.8
+          #"DEBIAN_FRONTEND=noninteractive sudo apt-get --yes install ruby ruby-dev libopenssl-ruby irb build-essential wget ssl-cert"
+          # ruby 1.9.1
+           "DEBIAN_FRONTEND=noninteractive sudo apt-get --yes install ruby1.9.1 ruby1.9.1-dev libopenssl-ruby1.9.1 irb1.9.1 build-essential wget ssl-cert"
         when /centos/, /red hat/, /scientific linux/
           "yum -y install ruby ruby-shadow gcc gcc-c++ ruby-devel wget"
         else
           raise UnsupportedInstallationPlatform.new("Can't install on node '#{self.name}' with unknown distrubtor: `#{self.platform[:distrubtor]}`", self.name)
         end
 
-      self.say("Installing ruby...")
+      self.say("*** Installing ruby *** ")
       if self.platform[:distributor].downcase == "ubuntu"
          self.execute("sudo apt-get update", true)
       end   
       self.execute(command, true)
-      self.say("Installed ruby", false)
+      self.say("*** Installed ruby ***", false)
     end
 
     # Prepares an upload, by creating a cache of shared files used by all nodes.
@@ -225,13 +236,15 @@ class Pocketknife
     # @yield [] Prepares the upload, executes the block, and cleans up the upload when done.
     def self.prepare_upload(&block)
       begin
-        puts("prepare upload...")
+        puts("********************** ")
+        puts("*** Prepare upload *** ")
+        puts("********************** ")
         # TODO either do this in memory or scope this to the PID to allow concurrency
         TMP_SOLO_RB.open("w") {|h| h.write(SOLO_RB_CONTENT)}
         TMP_CHEF_SOLO_APPLY.open("w") {|h| h.write(CHEF_SOLO_APPLY_CONTENT)}
         # minitar gem on windows tar file corrupt so use alternative command
         if RUBY_PLATFORM.index("mswin") != nil or RUBY_PLATFORM.index("i386-mingw32") != nil
-           puts "On windows using tar.exe...."
+           puts "*** On windows using tar.exe *** "
            puts "#{ENV['EC2DREAM_HOME']}/tar/tar.exe cvf #{TMP_TARBALL.to_s} #{VAR_POCKETKNIFE_COOKBOOKS.basename.to_s} #{VAR_POCKETKNIFE_SITE_COOKBOOKS.basename.to_s} #{VAR_POCKETKNIFE_ROLES.basename.to_s} #{TMP_SOLO_RB.to_s} #{TMP_CHEF_SOLO_APPLY.to_s}" 
            system "#{ENV['EC2DREAM_HOME']}/tar/tar.exe cvf #{TMP_TARBALL.to_s} #{VAR_POCKETKNIFE_COOKBOOKS.basename.to_s} #{VAR_POCKETKNIFE_SITE_COOKBOOKS.basename.to_s} #{VAR_POCKETKNIFE_ROLES.basename.to_s} #{TMP_SOLO_RB.to_s} #{TMP_CHEF_SOLO_APPLY.to_s}" 
         else
@@ -280,9 +293,9 @@ class Pocketknife
      if @sudo != nil and @sudo != ""
        upload_sudo
      else   
-       self.say("Uploading configuration...")
+       self.say("*** Uploading configuration ***")
  
-       self.say("Removing old files...", false)
+       self.say("*** Removing old files *** ", false)
        self.execute <<-HERE
     umask 0377 &&
    rm -rf "#{ETC_CHEF}" "#{VAR_POCKETKNIFE}" "#{VAR_POCKETKNIFE_CACHE}" "#{CHEF_SOLO_APPLY}" "#{CHEF_SOLO_APPLY_ALIAS}" &&
@@ -307,7 +320,7 @@ class Pocketknife
    mv * "#{VAR_POCKETKNIFE}"
        HERE
  
-       self.say("Finished uploading!", false)
+       self.say("*** Finished uploading! *** ", false)
     end
  end   
 
@@ -315,9 +328,10 @@ class Pocketknife
     #
     # IMPORTANT: You must first call {prepare_upload} to create the shared files that will be uploaded.
     def upload_sudo
-      self.say("Uploading configuration using sudo...")
-
-      self.say("Removing old files...", false)
+      self.say("****************************************** ")
+      self.say("*** Uploading configuration using sudo *** ")
+      self.say("****************************************** ")
+      self.say("*** Removing old files ***", false)
       self.execute <<-HERE
    umask 0377 &&
   #{@sudo}rm -rf "#{ETC_CHEF}" "#{VAR_POCKETKNIFE}" "#{VAR_POCKETKNIFE_CACHE}" "#{CHEF_SOLO_APPLY}" "#{CHEF_SOLO_APPLY_ALIAS}" &&
@@ -327,11 +341,11 @@ class Pocketknife
   #{@sudo}chmod -R a+rwX "#{VAR_POCKETKNIFE_CACHE}"
   HERE
 
-      self.say("Uploading new files...", false)
+      self.say("*** Uploading new files ***", false)
       self.say("Uploading #{self.local_node_json_pathname} to #{NODE_JSON}", false)
       self.connection.file_upload(self.local_node_json_pathname.to_s, NODE_JSON.to_s)
       self.connection.file_upload(TMP_TARBALL.to_s, VAR_POCKETKNIFE_TARBALL.to_s)
-      self.say("Installing new files...", false)
+      self.say("*** Installing new files ***", false)
       self.execute <<-HERE, true
   cd "#{VAR_POCKETKNIFE_CACHE}" &&
   #{@sudo}tar xvf "#{VAR_POCKETKNIFE_TARBALL}" &&
@@ -343,8 +357,9 @@ class Pocketknife
   #{@sudo}rm "#{VAR_POCKETKNIFE_TARBALL}" &&
   #{@sudo}mv * "#{VAR_POCKETKNIFE}"
       HERE
-
-      self.say("Finished uploading!", false)
+      self.say("*************************** ", false)
+      self.say("*** Finished uploading! *** ", false)
+      self.say("*************************** ", false)
     end
     
  
@@ -354,12 +369,13 @@ class Pocketknife
     # Applies the configuration to the node. Installs Chef, Ruby and Rubygems if needed.
     def apply
       self.install
-
-      self.say("Applying configuration...", true)
+      self.say("****************************** ", true)
+      self.say("*** Applying configuration *** ", true)
+      self.say("****************************** ", true)
       command = "#{@sudo}chef-solo -j #{NODE_JSON}"
       command << " -l debug" if self.pocketknife.verbosity == true
       self.execute(command, true)
-      self.say("Finished applying!")
+      self.say("*** Finished applying! *** ")
     end
 
     # Deploys the configuration to the node, which calls {#upload} and {#apply}.
