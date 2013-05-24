@@ -5,7 +5,7 @@
 
 Gem::Specification.new do |s|
   s.name = %q{pocketknife_ec2dream}
-  s.version = "0.1.7"
+  s.version = "0.1.8"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["Igal Koshevoy","Neill Turner"]
@@ -40,6 +40,8 @@ This is modified to work with EC2Dream Fogviz.
     "lib/pocketknife/node.rb",
     "lib/pocketknife/node_manager.rb",
     "lib/pocketknife/version.rb",
+    "tar/readme.txt", 
+    "tar/tar.exe",
     "pocketknife.gemspec",
     "spec/pocketknife_execution_error_spec.rb",
     "spec/pocketknife_node_manager_spec.rb",

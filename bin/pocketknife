@@ -10,6 +10,13 @@ if lib.exist?
   $LOAD_PATH.unshift(lib.dirname)
 end
 
+dir = File.dirname(__FILE__)
+ENV['POCKETKNIFE_HOME'] = dir[0..-5]
+
+puts "POCKETKNIFE_HOME set to #{ENV['POCKETKNIFE_HOME']}" 
+
 require 'pocketknife'
+
+puts $LOAD_PATH
 
 Pocketknife::cli(ARGV)
