@@ -245,8 +245,8 @@ class Pocketknife
         # minitar gem on windows tar file corrupt so use alternative command
         if RUBY_PLATFORM.index("mswin") != nil or RUBY_PLATFORM.index("i386-mingw32") != nil
            puts "*** On windows using tar.exe *** "
-           puts "#{ENV['EC2DREAM_HOME']}/tar/tar.exe cvf #{TMP_TARBALL.to_s} #{VAR_POCKETKNIFE_COOKBOOKS.basename.to_s} #{VAR_POCKETKNIFE_SITE_COOKBOOKS.basename.to_s} #{VAR_POCKETKNIFE_ROLES.basename.to_s} #{TMP_SOLO_RB.to_s} #{TMP_CHEF_SOLO_APPLY.to_s}" 
-           system "#{ENV['EC2DREAM_HOME']}/tar/tar.exe cvf #{TMP_TARBALL.to_s} #{VAR_POCKETKNIFE_COOKBOOKS.basename.to_s} #{VAR_POCKETKNIFE_SITE_COOKBOOKS.basename.to_s} #{VAR_POCKETKNIFE_ROLES.basename.to_s} #{TMP_SOLO_RB.to_s} #{TMP_CHEF_SOLO_APPLY.to_s}" 
+           puts "#{ENV['EC2DREAM_HOME']}/tar/tar.exe cvf #{TMP_TARBALL.to_s} #{VAR_POCKETKNIFE_COOKBOOKS.basename.to_s} #{VAR_POCKETKNIFE_SITE_COOKBOOKS.basename.to_s} #{VAR_POCKETKNIFE_ROLES.basename.to_s} #{VAR_POCKETKNIFE_DATA_BAGS.basename.to_s} #{TMP_SOLO_RB.to_s} #{TMP_CHEF_SOLO_APPLY.to_s}" 
+           system "#{ENV['EC2DREAM_HOME']}/tar/tar.exe cvf #{TMP_TARBALL.to_s} #{VAR_POCKETKNIFE_COOKBOOKS.basename.to_s} #{VAR_POCKETKNIFE_SITE_COOKBOOKS.basename.to_s} #{VAR_POCKETKNIFE_ROLES.basename.to_s} #{VAR_POCKETKNIFE_DATA_BAGS.basename.to_s} #{TMP_SOLO_RB.to_s} #{TMP_CHEF_SOLO_APPLY.to_s}" 
         else
            TMP_TARBALL.open("w") do |handle|
              Archive::Tar::Minitar.pack(
@@ -254,6 +254,7 @@ class Pocketknife
                VAR_POCKETKNIFE_COOKBOOKS.basename.to_s,
                VAR_POCKETKNIFE_SITE_COOKBOOKS.basename.to_s,
                VAR_POCKETKNIFE_ROLES.basename.to_s,
+               VAR_POCKETKNIFE_DATA_BAGS.basename.to_s,
                TMP_SOLO_RB.to_s,
                TMP_CHEF_SOLO_APPLY.to_s
               ],
@@ -429,12 +430,16 @@ class Pocketknife
     # Remote path to pocketknife's roles
     # @private
     VAR_POCKETKNIFE_ROLES = VAR_POCKETKNIFE + "roles"
+    # Remote path to pocketknife's roles
+    # @private
+    VAR_POCKETKNIFE_DATA_BAGS = VAR_POCKETKNIFE + "data_bags"
     # Content of the solo.rb file
     # @private
     SOLO_RB_CONTENT = <<-HERE
 file_cache_path "#{VAR_POCKETKNIFE_CACHE}"
 cookbook_path ["#{VAR_POCKETKNIFE_COOKBOOKS}", "#{VAR_POCKETKNIFE_SITE_COOKBOOKS}"]
 role_path "#{VAR_POCKETKNIFE_ROLES}"
+data_bag_path "#{VAR_POCKETKNIFE_DATA_BAGS}"
     HERE
     # Remote path to chef-solo-apply
     # @private

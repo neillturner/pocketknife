@@ -91,6 +91,20 @@ If you really need to debug on the remote machine, you may be interested about s
 * `/etc/chef/node.json` contains the node-specific configuration, like the `runlist` and attributes.
 * `/var/local/pocketknife` contains the `cookbooks`, `site-cookbooks` and `roles` describing your configuration.
 
+Hstory
+------
+Version 0.1.7
+-------------
+Added support for chef-solo data_bags
+
+Version 0.1.6
+-------------
+Move ubuntu verion to install Ruby 1.9 on the server
+
+Version 0.1.5
+-------------
+Initial Version. Modified to work with EC2Dream Fogviz
+
 Contributing
 ------------
 
