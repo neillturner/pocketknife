@@ -153,8 +153,10 @@ class Pocketknife
 
     # Installs Chef on the remote node.
     def install_chef
-      self.say("*** Installing chef ***")
-      self.execute("#{@sudo} gem install --no-rdoc --no-ri chef", true)
+      chef_version = ""
+      chef_version = "-v #{self.pocketknife.chef_version}" if self.pocketknife.chef_version != nil and self.pocketknife.chef_version != "" and self.pocketknife.chef_version != "latest"
+      self.say("*** Installing chef #{chef_version} ***")
+      self.execute("#{@sudo} gem install --no-rdoc --no-ri #{chef_version} chef", true)
       self.say("Installed chef", false)
     end
 

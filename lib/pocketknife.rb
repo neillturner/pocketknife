@@ -105,6 +105,11 @@ OPTIONS:
       parser.on("-I", "--noinstall", "Don't install Chef automatically") do |v|
         pocketknife.can_install = false
       end
+      
+      parser.on("-j", "--chefversion CHEF_VERSION", "install a paticular chef version") do |name|
+              options[:chef_version] = name
+              pocketknife.chef_version = name
+      end
 
       begin
         arguments = parser.parse!
@@ -155,6 +160,9 @@ OPTIONS:
   
   # key for ssh access.
   attr_accessor :ssh_key
+  
+  # key for ssh access.
+  attr_accessor :chef_version
   
   # user when doing sudo access
   attr_accessor :user

@@ -5,7 +5,7 @@
 
 Gem::Specification.new do |s|
   s.name = %q{pocketknife_ec2dream}
-  s.version = "0.1.8"
+  s.version = "0.1.9"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["Igal Koshevoy","Neill Turner"]
@@ -18,7 +18,7 @@ With pocketknife, you don't need to setup or manage a specialized chef-server no
 
 With pocketknife, all of your cookbooks, roles and nodes are stored in easy-to-use files that you can edit, share, backup and version control with tools you already have.
 
-This is modified to work with EC2Dream Fogviz. 
+This is modified to work with EC2Dream Fogviz but can also work stand alone. 
 }
   s.email = %q{neillwturner@gmail.com}
   s.executables = ["pocketknife", "pocketknife"]
