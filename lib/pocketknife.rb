@@ -110,6 +110,11 @@ OPTIONS:
               options[:chef_version] = name
               pocketknife.chef_version = name
       end
+      
+      parser.on("-l", "--localport LOCAL_PORT", "use a local port to access an ssh tunnel") do |name|
+              options[:local_port] = name
+              pocketknife.local_port = name
+      end      
 
       begin
         arguments = parser.parse!
@@ -152,7 +157,7 @@ OPTIONS:
   #
   # @return [String] A version string.
   def self.version
-    return "0.0.1"
+    return "0.1.10"
   end
 
   # Amount of detail to display? true means verbose, nil means normal, false means quiet.
@@ -163,6 +168,9 @@ OPTIONS:
   
   # key for ssh access.
   attr_accessor :chef_version
+  
+  # key for  local port.
+  attr_accessor :local_port
   
   # user when doing sudo access
   attr_accessor :user
