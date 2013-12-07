@@ -412,6 +412,7 @@ class Pocketknife
       command = "#{@sudo}chef-solo -j #{NODE_JSON}"
       command << " -l debug" if self.pocketknife.verbosity == true
       self.execute(command, true)
+	  self.execute("#{@sudo}rm -rf \"#{VAR_POCKETKNIFE}\" \"#{VAR_POCKETKNIFE_CACHE}\"")
       self.say("*** Finished applying! *** ")
     end
 
