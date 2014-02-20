@@ -61,43 +61,21 @@ OPTIONS:
       HERE
 
       options = {}
+	  
+	  parser.on("-a", "--apply", "Runs chef to apply already-uploaded configuration") do |v|
+        options[:apply] = true
+      end
 
       parser.on("-c", "--create PROJECT", "Create project") do |name|
         pocketknife.create(name)
         return
       end
 
-      parser.on("-V", "--version", "Display version number") do |name|
-        puts "Pocketknife #{Pocketknife::Version::STRING}"
-        return
+	  parser.on("-f", "--foodcritic PARAMETERS", "style testing of chef cookbooks  in the cookbook path specified") do |name|
+        options[:foodcritic] = true
+        pocketknife.foodcritic = name
       end
-
-      parser.on("-v", "--verbose", "Display detailed status information") do |name|
-        pocketknife.verbosity = true
-      end
-
-      parser.on("-q", "--quiet", "Display minimal status information") do |v|
-        pocketknife.verbosity = false
-      end
-      
-      parser.on("-s", "--sudo USER", "Run under non-root users with sudo") do |name|
-        options[:sudo] = true
-        pocketknife.user = name
-      end
-      
-      parser.on("-k", "--sshkey SSHKEY", "Use an ssh key") do |name|
-        options[:ssh_key] = name
-        pocketknife.ssh_key = name
-      end
-
-      parser.on("-u", "--upload", "Upload configuration, but don't apply it") do |v|
-        options[:upload] = true
-      end
-
-      parser.on("-a", "--apply", "Runs chef to apply already-uploaded configuration") do |v|
-        options[:apply] = true
-      end
-
+	  
       parser.on("-i", "--install", "Install Chef automatically") do |v|
         pocketknife.can_install = true
       end
@@ -110,17 +88,84 @@ OPTIONS:
               options[:chef_version] = name
               pocketknife.chef_version = name
       end
-      
+
+     parser.on("-k", "--sshkey SSHKEY", "Use an ssh key") do |name|
+        options[:ssh_key] = name
+        pocketknife.ssh_key = name
+      end
+  
       parser.on("-l", "--localport LOCAL_PORT", "use a local port to access an ssh tunnel") do |name|
               options[:local_port] = name
               pocketknife.local_port = name
-      end      
+      end 
 
-      begin
+	  parser.on("-m", "--rvm", "Using rvm to run ruby") do |v|
+        options[:rvm] = true
+		pocketknife.rvm = true
+      end
+	  
+	  parser.on("-n", "--deleterepo", "Delete the chef repository after the run") do |v|
+        options[:deleterepo] = true
+		pocketknife.deleterepo = true
+      end	  
+	  
+	  parser.on("-p", "--password PASSWORD", "password of user if not using ssh keys") do |name|
+        options[:password] = true
+        pocketknife.password = name
+      end	  
+
+      parser.on("-q", "--quiet", "Display minimal status information") do |v|
+        pocketknife.verbosity = false
+      end
+	  
+	  parser.on("-r", "--rspec PATH", "RSpec testing of chef cookbooks in the path specified") do |name|
+  	    options[:rspec] = true
+        pocketknife.rspec = name
+      end	  
+      	 
+	  parser.on("-s", "--sudo USER", "Run under non-root users with sudo") do |name|
+        options[:sudo] = true
+        pocketknife.user = name
+      end
+
+	  parser.on("-t", "--sudopassword PASSWORD", "password of sudo user") do |name|
+        options[:sudo_password] = true
+        pocketknife.sudo_password = name
+      end
+	  
+     parser.on("-u", "--upload", "Upload configuration, but don't apply it") do |v|
+        options[:upload] = true
+      end
+
+      parser.on("-V", "--version", "Display version number") do |name|
+        puts "Pocketknife #{Pocketknife::Version::STRING}"
+        return
+      end
+
+      parser.on("-v", "--verbose", "Display detailed status information") do |name|
+        pocketknife.verbosity = true
+      end	
+	  
+	  parser.on("-w", "--why-run", "Runs chef solo with why-run option so no changes are made") do |v|
+        options[:apply] = true
+		options[:why_run] = true
+		pocketknife.why_run = true
+      end	  
+  
+	  parser.on("-x", "--xoptions OPTIONS", "Extra options for chef solo") do |name|
+        options[:xoptions] = name
+        pocketknife.xoptions = name
+      end
+	  
+ 	  parser.on("-z", "--noupdatepackages", "don't update the packages before running chef") do |v|
+        options[:noupdatepackages] = true
+		pocketknife.noupdatepackages = true
+      end	 	  
+
+     begin
         arguments = parser.parse!
       rescue OptionParser::MissingArgument => e
         puts parser
-        puts
         puts "ERROR: #{e}"
         exit -1
       end
@@ -135,17 +180,26 @@ OPTIONS:
       end
 
       begin
+        if not options[:upload] and not options[:apply]
+          pocketknife.deploy(nodes)
+	   else
+	   
         if options[:upload]
           pocketknife.upload(nodes)
         end
 
+        if options[:foodcritic]
+          pocketknife.foodcritic_run(nodes)
+        end	
+
+		if options[:rspec]
+          pocketknife.rspec_test(nodes)
+        end	
+		
         if options[:apply]
           pocketknife.apply(nodes)
         end
-
-        if not options[:upload] and not options[:apply]
-          pocketknife.deploy(nodes)
-        end
+	   end
       rescue NodeError => e
         puts "! #{e.node}: #{e}"
         exit -1
@@ -157,7 +211,7 @@ OPTIONS:
   #
   # @return [String] A version string.
   def self.version
-    return "0.1.10"
+    return "0.1.14"
   end
 
   # Amount of detail to display? true means verbose, nil means normal, false means quiet.
@@ -175,6 +229,32 @@ OPTIONS:
   # user when doing sudo access
   attr_accessor :user
 
+   # password of user if not using ssh keys
+  attr_accessor :password
+  
+  # password of sudo user
+  attr_accessor :sudo_password
+
+  # rvm to run ruby
+  attr_accessor :rvm
+  
+  # xtra options for the chef solo command 
+  attr_accessor :xoptions
+
+  # don't delete puppet repo after chef
+  attr_accessor :deleterepo
+  
+   # don't update packages before running chef
+  attr_accessor :noupdatepackages 
+  
+  # foodcritic syntax and style testing 
+  attr_accessor :foodcritic  
+  
+   # chef rspec testing
+  attr_accessor :rspec  
+  
+  # chef with why-run option 
+  attr_accessor :why_run  
 
   # Can chef and its dependencies be installed automatically if not found? true means perform installation without prompting, false means quit if chef isn't available, and nil means prompt the user for input.
   attr_accessor :can_install
@@ -271,6 +351,27 @@ OPTIONS:
       end
     end
   end
+  
+  # Syntax check configurations to remote nodes.
+  #
+  # @param [Array<String>] nodes A list of node names.
+  def foodcritic_run(nodes)
+    node_manager.assert_known(nodes)
+    for node in nodes
+      node_manager.find(node).foodcritic
+    end
+  end  
+  
+  # rspec test configurations to remote nodes.
+  #
+  # @param [Array<String>] nodes A list of node names.
+  def rspec_test(nodes)
+    node_manager.assert_known(nodes)
+    for node in nodes
+      node_manager.find(node).rspec_test
+    end
+  end  
+
 
   # Applies configurations to remote nodes.
   #

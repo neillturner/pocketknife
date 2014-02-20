@@ -5,7 +5,7 @@ class Pocketknife
   module Version
     MAJOR = 0
     MINOR = 1
-    PATCH = 10
+    PATCH = 14
     BUILD = nil
 
     STRING = [MAJOR, MINOR, PATCH, BUILD].compact.join('.')

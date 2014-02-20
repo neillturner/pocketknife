@@ -93,6 +93,10 @@ If you really need to debug on the remote machine, you may be interested about s
 
 Hstory
 ------
+version 0.1.14
+--------------
+enhanced to support foodcritic, berkshelf, and chefspec with lots of configurability
+
 Version 0.1.7
 -------------
 Added support for chef-solo data_bags

@@ -16,7 +16,14 @@ class Pocketknife
     attr_accessor :platform_cache
     
     @sudo = ""
-
+	@deleterepo = false
+	@noupdatepackages = false
+	@xoptions = ""
+	@foodcritic = ""
+	@rspec = ""
+	@why_run = ""
+	@log_location = '/var/local/pocketknife'
+	
     # Initialize a new node.
     #
     # @param [String] name A node name.
@@ -25,30 +32,61 @@ class Pocketknife
       self.name = name
       self.pocketknife = pocketknife
       if pocketknife.user != nil and pocketknife.user != "" and pocketknife.user != "root"
-         @sudo = "sudo "
-      end   
-      self.connection_cache = nil
-    end
+	     if pocketknife.sudo_password != nil and pocketknife.sudo_password != ""
+			@sudo = "echo #{pocketknife.sudo_password} | sudo -S "
+		 else
+           @sudo = "sudo "
+		 end
+      end
+	  @deleterepo = false
+	  @noupdatepackages = false
+	  if pocketknife.deleterepo != nil and pocketknife.deleterepo == true	  
+         @deleterepo =true
+      end
+	  if pocketknife.noupdatepackages != nil and pocketknife.noupdatepackages == true	  
+         @noupdatepackages =true
+      end	  
+	  if pocketknife.xoptions != nil and pocketknife.xoptions != ""	  
+         @xoptions = pocketknife.xoptions
+      end	  
+ 	  if pocketknife.why_run != nil and pocketknife.why_run == true	  
+         @why_run ="--why-run"
+      end
+	  if pocketknife.foodcritic != nil and pocketknife.foodcritic != ""
+   	     @foodcritic = VAR_POCKETKNIFE + pocketknife.foodcritic
+      end
+	  if pocketknife.rspec != nil and pocketknife.rspec != ""
+   	     @rspec = VAR_POCKETKNIFE + pocketknife.rspec
+      end
+ 	  self.connection_cache = nil
+	  @log_location = '/var/local/pocketknife'
+    end	
 
     # Returns a Rye::Box connection.
     #
     # Caches result to {#connection_cache}.
-    def connection
+ 	def connection
       return self.connection_cache ||= begin
           #rye = Rye::Box.new(self.name, :user => "root")
           user = "root"
+		  password = ""
           if self.pocketknife.user != nil and self.pocketknife.user != ""
              user = self.pocketknife.user
           end
-          if self.pocketknife.local_port != nil and self.pocketknife.local_port != ""
-             puts "*** Connecting to ssh tunnel ..... via localhost port #{self.pocketknife.local_port} as user #{user} with ssh key *** "
-             rye = Rye::Box.new("localhost", {:user => user, :port => self.pocketknife.local_port, :keys => self.pocketknife.ssh_key, :safe => false })           
+		  if self.pocketknife.local_port != nil and self.pocketknife.local_port != ""
+             if self.pocketknife.ssh_key != nil and self.pocketknife.ssh_key != ""
+                puts "*** Connecting to ssh tunnel ..... via localhost port #{self.pocketknife.local_port} as user #{user} with ssh key *** "
+                rye = Rye::Box.new("localhost", {:user => user, :port => self.pocketknife.local_port, :keys => self.pocketknife.ssh_key, :safe => false })  
+             else
+                puts "*** Connecting to ssh tunnel ..... via localhost port #{self.pocketknife.local_port} as user #{user} *** "
+                 rye = Rye::Box.new("localhost", {:user => user, :password => self.pocketknife.password, :port => self.pocketknife.local_port, :safe => false })
+             end
           elsif self.pocketknife.ssh_key != nil and self.pocketknife.ssh_key != ""
              puts "*** Connecting to .... #{self.name} as user #{user} with ssh key *** "
              rye = Rye::Box.new(self.name, {:user => user, :keys => self.pocketknife.ssh_key, :safe => false })
           else
              puts "*** Connecting to .... #{self.name} as user #{user} *** "
-             rye = Rye::Box.new(self.name, {:user => user })
+             rye = Rye::Box.new(self.name, {:user => user, :password => self.pocketknife.password })
           end
           rye.disable_safe_mode
           rye
@@ -151,6 +189,10 @@ class Pocketknife
     # @raise [NotInstalling] Raised if Chef isn't installed, but user didn't allow installation.
     # @raise [UnsupportedInstallationPlatform] Raised if there's no installation information for this platform.
     def install
+	  if @noupdatepackages == nil or @noupdatepackages != true
+	    self.install_packages
+	  end	
+	  self.execute("#{@sudo} source /etc/profile.d/rvm.sh", true) if pocketknife.rvm != nil and pocketknife.rvm == true
       unless self.has_executable?("chef-solo")
         case self.pocketknife.can_install
         when nil
@@ -175,12 +217,10 @@ class Pocketknife
           self.install_ruby
         end
 
-        unless self.has_executable?("gem")
-           self.install_ruby
-        #  self.install_rubygems
-        end
-
         self.install_chef
+      end
+	  unless self.has_executable?("berks")
+         self.install_berkshelf
       end
     end
 
@@ -189,75 +229,97 @@ class Pocketknife
       chef_version = ""
       chef_version = "-v #{self.pocketknife.chef_version}" if self.pocketknife.chef_version != nil and self.pocketknife.chef_version != "" and self.pocketknife.chef_version != "latest"
       self.say("*** Installing chef #{chef_version} ***")
-      self.execute("#{@sudo} gem install --no-rdoc --no-ri #{chef_version} chef", true)
+      self.execute("#{@sudo} gem install --no-rdoc --no-ri #{chef_version} chef -V", true)
       self.say("Installed chef", false)
     end
 
-    # Installs Rubygems on the remote node - this is obsolete
-   def install_rubygems
-     if @sudo != nil and @sudo != ""
-       install_rubygems_sudo
-     else      
-      self.say("*** Installing rubygems ***")
-      self.execute(<<-HERE, true)
-  cd /root &&      
-  rm -rf rubygems-1.3.7 rubygems-1.3.7.tgz &&
-  wget http://production.cf.rubygems.org/rubygems/rubygems-1.3.7.tgz &&
-  tar zxf rubygems-1.3.7.tgz &&
-  chmod -R a+rwX rubygems-1.3.7 &&
-  cd rubygems-1.3.7 &&
-  ruby setup.rb --no-format-executable &&
-  rm -rf rubygems-1.3.7 rubygems-1.3.7.tgz
-      HERE
-      self.say("*** Installed rubygems *** ", false)
-     end
-   end 
-
-    def install_rubygems_sudo
-      self.say("*** Installing rubygems sudo ***")
-      case self.platform[:distributor].downcase
-        when /ubuntu/, /debian/, /gnu\/linux/
-          self.execute(<<-HERE, true)
-          sudo apt-get rubygems1.9.1
-      HERE
-      else
-         self.execute(<<-HERE, true)  
-  #{@sudo}rm -rf rubygems-1.3.7 rubygems-1.3.7.tgz &&
-  #{@sudo}wget http://production.cf.rubygems.org/rubygems/rubygems-1.3.7.tgz &&
- #{@sudo}tar zxf rubygems-1.3.7.tgz &&
- #{@sudo}chmod -R a+rwX rubygems-1.3.7 &&
-  cd rubygems-1.3.7 &&
-  #{@sudo}ruby setup.rb --no-format-executable &&
-  #{@sudo}rm -rf rubygems-1.3.7 rubygems-1.3.7.tgz
-  #{@sudo}apt-get rubygems1.3.7
-      HERE
-     end  
-     self.say("*** Installed rubygems *** ", false)
-    end
-
+ 
     # Installs Ruby on the remote node.
     def install_ruby
-      command = \
         case self.platform[:distributor].downcase
         when /ubuntu/, /debian/, /gnu\/linux/
           # ruby 1.8
           #"DEBIAN_FRONTEND=noninteractive sudo apt-get --yes install ruby ruby-dev libopenssl-ruby irb build-essential wget ssl-cert"
           # ruby 1.9.1
-           "DEBIAN_FRONTEND=noninteractive sudo apt-get --yes install ruby1.9.1 ruby1.9.1-dev libopenssl-ruby1.9.1 irb1.9.1 build-essential wget ssl-cert rubygems"
+          command = "DEBIAN_FRONTEND=noninteractive #{@sudo} apt-get --yes install ruby1.9.1 ruby1.9.1-dev libopenssl-ruby1.9.1 irb1.9.1 build-essential wget ssl-cert rubygems"
         when /centos/, /red hat/, /scientific linux/
-          "#{@sudo}yum -y install ruby ruby-shadow gcc gcc-c++ ruby-devel rubygems wget"
-        else
+		  if pocketknife.rvm != nil and pocketknife.rvm == true
+             command   <<-HERE
+#{@sudo} yum -y install gcc-c++ patch readline readline-devel zlib zlib-devel &&
+#{@sudo} yum -y install libyaml-devel libffi-devel openssl-devel make &&
+#{@sudo} yum -y install bzip2 autoconf automake libtool bison iconv-devel &&
+#{@sudo} curl -L get.rvm.io | bash -s stable &&
+#{@sudo} source /etc/profile.d/rvm.sh &&
+#{@sudo} rvm install 1.9.3 &&
+#{@sudo} rvm use 1.9.3 --default &&
+#{@sudo} ruby --version	
+  HERE  	 
+		  else 
+             command = "#{@sudo}yum -y install ruby ruby-shadow gcc gcc-c++ ruby-devel rubygems wget"
+		  end
+       else
           raise UnsupportedInstallationPlatform.new("Can't install on node '#{self.name}' with unknown distrubtor: `#{self.platform[:distrubtor]}`", self.name)
         end
 
-      self.say("*** Installing ruby *** ")
-      if self.platform[:distributor].downcase == "ubuntu"
-         self.execute("sudo apt-get update", true)
-      end   
-      self.say("*** #{command} ***", false)
-      self.execute(command, true)
-      self.say("*** Installed ruby ***", false)
+       self.say("*** Installing ruby *** ")
+       if command != ""
+         self.say("*** #{command} ***", false)
+         self.execute(command, true)
+         self.say("*** Installed ruby ***", false)
+       end
+	end   
+
+	# Installs berkshelf on the remote node.
+    def install_berkshelf
+      self.say("*** Installing berkshelf ***")
+      self.execute <<-HERE
+      #{@sudo} gem install berkshelf -V 
+    HERE
+      self.say("Installed berkshelf", false)
+    end	
+	
+	# Installs chefspec on the remote node.
+    def install_chefspec
+      self.say("*** Installing chefspec ***")
+      self.execute <<-HERE
+      #{@sudo} gem install chefspec fauxhai  
+    HERE
+      self.say("Installed chefspec", false)
     end
+	
+	# Installs foodcritic on the remote node.
+    def install_foodcritic
+      self.say("*** Installing foodcritic needs ruby 1.9.2+ ***")
+     case self.platform[:distributor].downcase
+        when /ubuntu/, /debian/, /gnu\/linux/
+        self.execute <<-HERE
+    #{@sudo} apt-get -y install libxslt-dev libxml2-dev &&
+    #{@sudo} gem install foodcritic
+    HERE
+      else
+         self.execute <<-HERE
+    #{@sudo} yum install -y libxml2 libxml2-devel &&
+    #{@sudo} gem install foodcritic
+     HERE
+	  end	  
+       self.say("Installed foodcritic", false)
+    end	
+	
+    def install_packages
+      self.say("*** Installing packages ***")
+      case self.platform[:distributor].downcase
+        when /ubuntu/, /debian/, /gnu\/linux/
+        self.execute <<-HERE
+    #{@sudo} apt-get -y update &&
+    #{@sudo} apt-get -y upgrade
+    HERE
+      else
+         self.execute <<-HERE
+    #{@sudo}yum -y update
+     HERE
+	  end
+      self.say("Updated Packages", false)
+    end  		
 
     # Prepares an upload, by creating a cache of shared files used by all nodes.
     #
@@ -281,8 +343,10 @@ class Pocketknife
         # minitar gem on windows tar file corrupt so use alternative command
         if RUBY_PLATFORM.index("mswin") != nil or RUBY_PLATFORM.index("i386-mingw32") != nil
            puts "*** On windows using tar.exe *** "
-           puts "#{ENV['POCKETKNIFE_HOME']}/tar/tar.exe cvf #{TMP_TARBALL.to_s} #{VAR_POCKETKNIFE_COOKBOOKS.basename.to_s} #{VAR_POCKETKNIFE_SITE_COOKBOOKS.basename.to_s} #{VAR_POCKETKNIFE_ROLES.basename.to_s} #{VAR_POCKETKNIFE_DATA_BAGS.basename.to_s} #{TMP_SOLO_RB.to_s} #{TMP_CHEF_SOLO_APPLY.to_s}" 
-           system "#{ENV['POCKETKNIFE_HOME']}/tar/tar.exe cvf #{TMP_TARBALL.to_s} #{VAR_POCKETKNIFE_COOKBOOKS.basename.to_s} #{VAR_POCKETKNIFE_SITE_COOKBOOKS.basename.to_s} #{VAR_POCKETKNIFE_ROLES.basename.to_s} #{VAR_POCKETKNIFE_DATA_BAGS.basename.to_s} #{TMP_SOLO_RB.to_s} #{TMP_CHEF_SOLO_APPLY.to_s}" 
+           puts "#{ENV['POCKETKNIFE_HOME']}/tar/tar.exe cvf *.*" 
+           system "#{ENV['POCKETKNIFE_HOME']}/tar/tar.exe cvf #{TMP_TARBALL.to_s} *.*" 			   
+           #puts "#{ENV['POCKETKNIFE_HOME']}/tar/tar.exe cvf #{TMP_TARBALL.to_s} #{VAR_POCKETKNIFE_COOKBOOKS.basename.to_s} #{VAR_POCKETKNIFE_SITE_COOKBOOKS.basename.to_s} #{VAR_POCKETKNIFE_ROLES.basename.to_s} #{VAR_POCKETKNIFE_DATA_BAGS.basename.to_s} #{TMP_SOLO_RB.to_s} #{TMP_CHEF_SOLO_APPLY.to_s}  #{VAR_POCKETKNIFE_BERKSFILE.basename.to_s}" 
+           #system "#{ENV['POCKETKNIFE_HOME']}/tar/tar.exe cvf #{TMP_TARBALL.to_s} #{VAR_POCKETKNIFE_COOKBOOKS.basename.to_s} #{VAR_POCKETKNIFE_SITE_COOKBOOKS.basename.to_s} #{VAR_POCKETKNIFE_ROLES.basename.to_s} #{VAR_POCKETKNIFE_DATA_BAGS.basename.to_s} #{TMP_SOLO_RB.to_s} #{TMP_CHEF_SOLO_APPLY.to_s} #{VAR_POCKETKNIFE_BERKSFILE.basename.to_s}" 
         else
            TMP_TARBALL.open("w") do |handle|
              Archive::Tar::Minitar.pack(
@@ -292,7 +356,8 @@ class Pocketknife
                VAR_POCKETKNIFE_ROLES.basename.to_s,
                VAR_POCKETKNIFE_DATA_BAGS.basename.to_s,
                TMP_SOLO_RB.to_s,
-               TMP_CHEF_SOLO_APPLY.to_s
+               TMP_CHEF_SOLO_APPLY.to_s,
+			   VAR_POCKETKNIFE_BERKSFILE.basename.to_s
               ],
               handle
              )
@@ -333,10 +398,11 @@ class Pocketknife
        self.say("*** Uploading configuration ***")
  
        self.say("*** Removing old files *** ", false)
+	   self.execute("#{@sudo}rm -rf \"#{ETC_CHEF}\" \"#{VAR_POCKETKNIFE}\" \"#{VAR_POCKETKNIFE_CACHE}\" \"#{CHEF_SOLO_APPLY}\" \"#{CHEF_SOLO_APPLY_ALIAS}\"")
        self.execute <<-HERE
-    umask 0377 &&
-   rm -rf "#{ETC_CHEF}" "#{VAR_POCKETKNIFE}" "#{VAR_POCKETKNIFE_CACHE}" "#{CHEF_SOLO_APPLY}" "#{CHEF_SOLO_APPLY_ALIAS}" &&
-   mkdir -p "#{ETC_CHEF}" "#{VAR_POCKETKNIFE}" "#{VAR_POCKETKNIFE_CACHE}" "#{CHEF_SOLO_APPLY.dirname}" 
+  rm -f #{@log_location}/apply.log &&
+  umask 0377 &&
+    mkdir -p "#{ETC_CHEF}" "#{VAR_POCKETKNIFE}" "#{VAR_POCKETKNIFE_CACHE}" "#{CHEF_SOLO_APPLY.dirname}" 
    HERE
  
        self.say("Uploading new files...", false)
@@ -369,9 +435,10 @@ class Pocketknife
       self.say("*** Uploading configuration using sudo *** ")
       self.say("****************************************** ")
       self.say("*** Removing old files ***", false)
+	  self.execute("#{@sudo}rm -rf \"#{ETC_CHEF}\" \"#{VAR_POCKETKNIFE}\" \"#{VAR_POCKETKNIFE_CACHE}\" \"#{CHEF_SOLO_APPLY}\" \"#{CHEF_SOLO_APPLY_ALIAS}\"")
       self.execute <<-HERE
+  #{@sudo}rm -f #{@log_location}/apply.log &&
    umask 0377 &&
-  #{@sudo}rm -rf "#{ETC_CHEF}" "#{VAR_POCKETKNIFE}" "#{VAR_POCKETKNIFE_CACHE}" "#{CHEF_SOLO_APPLY}" "#{CHEF_SOLO_APPLY_ALIAS}" &&
   #{@sudo}mkdir -p "#{ETC_CHEF}" "#{VAR_POCKETKNIFE}" "#{VAR_POCKETKNIFE_CACHE}" "#{CHEF_SOLO_APPLY.dirname}" &&
   #{@sudo}chmod -R a+rwX "#{ETC_CHEF}" &&
   #{@sudo}chmod -R a+rwX "#{VAR_POCKETKNIFE}" &&
@@ -399,26 +466,91 @@ class Pocketknife
       self.say("*************************** ", false)
     end
     
- 
-
+   # rspec test the configuration module on the node.
+    def foodcritic 
+	     self.install
+         unless self.has_executable?("foodcritic")
+          self.install_foodcritic
+         end    
+         self.say("******************* ", true)
+         self.say("*** foodcritic  *** ", true)
+         self.say("******************* ", true)
+	     self.say("***sudo is #{@sudo} ", true)	  	  
+         begin 
+	     self.execute(<<-HERE, true)
+   #{@sudo} foodcritic #{@foodcritic}  > #{@log_location}/foodcritic.log
+	 HERE
+         rescue
+         end 
+         self.say("*** showing last 40 lines from #{@log_location}/foodcritic.log *** ")
+         self.execute("#{@sudo} tail -n 40 #{@log_location}/foodcritic.log", true)		 
+		 self.say("*** Finished foodcritic full log is at #{@log_location}/foodcritic.log ***")
+     end  
+	 
+	 
+   # rspec test the configuration module on the node.
+    def rspec_test 
+	     self.install
+         unless self.has_executable?("rspec")
+          self.install_chefspec
+         end 
+         self.berks_run		 
+         self.say("******************************************************************* ", true)
+         self.say("*** RSpec testing module #{@rspec} *** ", true)
+         self.say("******************************************************************* ", true)
+	     self.say("***sudo is #{@sudo} ", true)	  	  
+         begin 
+		 # cd #{@rspec} &&		
+	     self.execute(<<-HERE, true)
+	cd #{VAR_POCKETKNIFE} &&	 
+    #{@sudo} rspec #{@rspec} > #{@log_location}/rspec.log
+	 HERE
+         rescue
+         end 
+         self.say("*** showing last 40 lines from #{@log_location}/rspec.log *** ")
+         self.execute("#{@sudo} tail -n 40 #{@log_location}/rspec.log", true)		 
+		 self.say("*** Finished Rspec testing full log is at #{@log_location}/rspec.log ***")
+     end  
+	 
+	 def berks_run 
+	  if self.connection.file_exists?("#{VAR_POCKETKNIFE_BERKSFILE}")
+       self.say("************************************************************************** ", true)
+       self.say("*** Run berks install using Berksfile to install in cookbooks repo dir *** ", true)
+       self.say("************************************************************************** ", true)	  
+	   begin 
+	    command = "#{@sudo} berks install --path=cookbooks "
+        command << " -d" if self.pocketknife.verbosity == true
+	    self.execute(<<-HERE, true)
+       cd #{VAR_POCKETKNIFE} &&
+       #{command}
+       HERE
+        rescue
+         error_run = true 
+        end
+	   end	
+	  end
     
 
     # Applies the configuration to the node. Installs Chef, Ruby and Rubygems if needed.
     def apply
       self.install
+      self.berks_run	
       self.say("****************************** ", true)
       self.say("*** Applying configuration *** ", true)
       self.say("****************************** ", true)
-      command = "#{@sudo}chef-solo -j #{NODE_JSON}"
+      command = "#{@sudo}chef-solo -j #{NODE_JSON} #{@xoptions}"
       command << " -l debug" if self.pocketknife.verbosity == true
+	  command << " --why-run" if self.pocketknife.why_run == true
       self.execute(command, true)
-	  self.execute("#{@sudo}rm -rf \"#{VAR_POCKETKNIFE}\" \"#{VAR_POCKETKNIFE_CACHE}\"")
+	  self.execute("#{@sudo}rm -rf \"#{ETC_CHEF}\" \"#{VAR_POCKETKNIFE}\" \"#{VAR_POCKETKNIFE_CACHE}\" \"#{CHEF_SOLO_APPLY}\" \"#{CHEF_SOLO_APPLY_ALIAS}\"") if @deleterepo == true
       self.say("*** Finished applying! *** ")
     end
 
     # Deploys the configuration to the node, which calls {#upload} and {#apply}.
     def deploy
       self.upload
+	  self.foodcritic_run if @foodcritic != nil and @foodcritic != ""
+	  self.rspec_test if @rspec != nil and @rspec != "" 	  
       self.apply
     end
 
@@ -470,6 +602,9 @@ class Pocketknife
     # Remote path to pocketknife's roles
     # @private
     VAR_POCKETKNIFE_DATA_BAGS = VAR_POCKETKNIFE + "data_bags"
+	# Remote path to pocketknife's cookbooks
+    # @private
+    VAR_POCKETKNIFE_BERKSFILE = VAR_POCKETKNIFE + "Berksfile"
     # Content of the solo.rb file
     # @private
     SOLO_RB_CONTENT = <<-HERE
@@ -500,4 +635,4 @@ chef-solo -j #{NODE_JSON} "$@"
     # @private
     TMP_TARBALL = Pathname.new("pocketknife.tmp")
   end
-end
+ end
